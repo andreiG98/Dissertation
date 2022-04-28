@@ -1,5 +1,9 @@
 # Data folder
 data/*
+!data-bin/*
+
+examples/translation/*
+!examples/translation/*.sh
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
