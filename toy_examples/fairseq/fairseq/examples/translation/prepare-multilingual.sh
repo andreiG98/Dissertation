@@ -36,17 +36,44 @@ if [ ! -d "$SCRIPTS" ]; then
 fi
 
 SRCS=(
-    "de"
-    "fr"
+    "pt"
+    "es"
 )
-TGT=en
-ORIG=multilingual_orig
-DATA=multilingual.de_fr.en.bpe16k
+TGT=ro
+ALL_SRCS=${SRCS[*]}
+JOINED_SRCS=${ALL_SRCS// /_}
+# ORIG=multilingual_orig_$JOINED_SRCS
+# ORIG=multilingual_orig
+# DATA=multilingual.$JOINED_SRCS.$TGT
+DATA=multilingual
 TMP=$DATA/tmp
+ORIG=$DATA/orig
+TMP_DOWNLOADS=$ORIG/tmp_downloads
 
-mkdir -p $ORIG $TMP $DATA
+mkdir -p $TMP_DOWNLOADS $ORIG $TMP $DATA
 
 cd $ORIG
+
+# TMP_DOWNLOADS=tmp_downloads
+# mkdir -p $TMP_DOWNLOADS
+
+for SRC in "${SRCS[@]}"; do
+    # download and extract data
+    DATA_FOLDER=$SRC-$TGT
+    echo "$DATA_FOLDER"
+    if [ -d "$DATA_FOLDER" ]; then
+        echo "$DATA_FOLDER already exists, skipping download"
+    else
+        mkdir -p $DATA_FOLDER
+        opus_express -s $SRC -t $TGT -c Europarl -q \
+            --download-dir tmp_downloads/ \
+            --test-set $DATA_FOLDER/test \
+            --dev-set $DATA_FOLDER/dev \
+            --train-set $DATA_FOLDER/train
+    fi
+done
+
+rm -rf $TMP_DOWNLOADS
 
 # # download and extract data
 # for ((i=0;i<${#URLS[@]};++i)); do
@@ -76,7 +103,30 @@ cd $ORIG
 #     fi
 # done
 
-cd ..
+cd ../..
+
+
+echo "pre-processing train/dev data..."
+for SRC in "${SRCS[@]}"; do
+    for LANG in $SRC $TGT; do
+        DATA_FOLDER=${SRC}-${TGT}
+
+        mkdir -p $TMP/$DATA_FOLDER
+
+        rm $TMP/$TOK
+
+        TOK=$DATA_FOLDER/train.tags.tok.$LANG
+        echo "$ORIG/$DATA_FOLDER/train.$LANG"
+        # cat $ORIG/$DATA_FOLDER/train.$LANG
+        for phase in "train" "dev"; do
+            cat $ORIG/$DATA_FOLDER/$phase.$LANG | \
+                perl $NORM_PUNC $LANG | \
+                perl $REM_NON_PRINT_CHAR | \
+                perl $TOKENIZER -threads 8 -a -l $LANG >> $TMP/$TOK
+        done
+    done
+done
+
 
 # echo "pre-processing train data..."
 # for SRC in "${SRCS[@]}"; do
@@ -92,6 +142,7 @@ cd ..
 #         done
 #     done
 # done
+
 
 # # Clean inainte sau dupa BPE???
 # ### for SRC in "${SRCS[@]}"; do
@@ -117,6 +168,7 @@ cd ..
 #     done
 # done
 
+
 # echo "splitting train and valid..."
 # for SRC in "${SRCS[@]}"; do
 #     for LANG in $SRC $TGT; do
@@ -137,40 +189,39 @@ cd ..
 # #     done
 # # done
 
-ALL_SRCS=${SRCS[*]}
-JOINED_SRCS=${ALL_SRCS// /_}
-TRAIN=$TMP/train.$JOINED_SRCS-$TGT
 
-rm -f $TRAIN
-for SRC in "${SRCS[@]}"; do
-    for LANG in $SRC $TGT; do
-        cat $TMP/train.${SRC}-${TGT}.$LANG >> $TRAIN
-    done
-done
+# TRAIN=$TMP/train.$JOINED_SRCS-$TGT
 
-BPE_CODE=$DATA/code.$JOINED_SRCS-$TGT
-echo "learn_bpe.py on ${TRAIN}..."
-python $SPM_TRAIN -s $BPE_TOKENS < $TRAIN > $BPE_CODE
+# rm -f $TRAIN
+# for SRC in "${SRCS[@]}"; do
+#     for LANG in $SRC $TGT; do
+#         cat $TMP/train.${SRC}-${TGT}.$LANG >> $TRAIN
+#     done
+# done
 
-for SRC in "${SRCS[@]}"; do
-    for LANG in $SRC $TGT; do
-        EXT=${SRC}-${TGT}.$LANG
-        for f in train.$EXT valid.$EXT test.$EXT; do
-            echo "apply_bpe.py to ${f}..."
-            python $SPM_ENCODE -c $BPE_CODE < $TMP/$f > $TMP/bpe.$f
-        done
-    done
-done
+# BPE_CODE=$DATA/code.$JOINED_SRCS-$TGT
+# echo "learn_bpe.py on ${TRAIN}..."
+# python $SPM_TRAIN -s $BPE_TOKENS < $TRAIN > $BPE_CODE
 
-for SRC in "${SRCS[@]}"; do
-    EXT=${SRC}-${TGT}
-    perl $CLEAN -ratio 1.5 $TMP/bpe.train.$EXT $SRC $TGT $DATA/train.$EXT 1 250
-    perl $CLEAN -ratio 1.5 $TMP/bpe.valid.$EXT $SRC $TGT $DATA/valid.$EXT 1 250
-done
+# for SRC in "${SRCS[@]}"; do
+#     for LANG in $SRC $TGT; do
+#         EXT=${SRC}-${TGT}.$LANG
+#         for f in train.$EXT valid.$EXT test.$EXT; do
+#             echo "apply_bpe.py to ${f}..."
+#             python $SPM_ENCODE -c $BPE_CODE < $TMP/$f > $TMP/bpe.$f
+#         done
+#     done
+# done
 
-for SRC in "${SRCS[@]}"; do
-    for LANG in $SRC $TGT; do
-        EXT=${SRC}-${TGT}.$LANG
-        cp $TMP/bpe.test.$EXT $DATA/test.$EXT
-    done
-done
+# for SRC in "${SRCS[@]}"; do
+#     EXT=${SRC}-${TGT}
+#     perl $CLEAN -ratio 1.5 $TMP/bpe.train.$EXT $SRC $TGT $DATA/train.$EXT 1 250
+#     perl $CLEAN -ratio 1.5 $TMP/bpe.valid.$EXT $SRC $TGT $DATA/valid.$EXT 1 250
+# done
+
+# for SRC in "${SRCS[@]}"; do
+#     for LANG in $SRC $TGT; do
+#         EXT=${SRC}-${TGT}.$LANG
+#         cp $TMP/bpe.test.$EXT $DATA/test.$EXT
+#     done
+# done
