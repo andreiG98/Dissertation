@@ -1,4 +1,6 @@
 # Data folder
+checkpoints*/*
+tools/*
 data*/*
 !data-bin/*
 
