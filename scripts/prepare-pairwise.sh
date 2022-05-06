@@ -25,20 +25,22 @@ echo $BPE_TOKENS
 #     esac
 # done
 
+cd ../tools/
 echo 'Cloning Moses github repository (for tokenization scripts)...'
 git clone https://github.com/moses-smt/mosesdecoder.git
 
 echo 'Cloning Subword NMT repository (for BPE pre-processing)...'
 git clone https://github.com/rsennrich/subword-nmt.git
+cd ../scripts
 
 ROOT=$(dirname "$0")
-SCRIPTS=mosesdecoder/scripts
+SCRIPTS=../tools/mosesdecoder/scripts
 TOKENIZER=$SCRIPTS/tokenizer/tokenizer.perl
 LC=$SCRIPTS/tokenizer/lowercase.perl
 CLEAN=$SCRIPTS/training/clean-corpus-n.perl
 NORM_PUNC=$SCRIPTS/tokenizer/normalize-punctuation.perl
 REM_NON_PRINT_CHAR=$SCRIPTS/tokenizer/remove-non-printing-char.perl
-BPEROOT=subword-nmt/subword_nmt
+BPEROOT=../tools/subword-nmt/subword_nmt
 SPM_TRAIN=$BPEROOT/learn_bpe.py
 SPM_ENCODE=$BPEROOT/apply_bpe.py
 FAIRSEQ_SCRIPTS=fairseq_scripts
