@@ -1,5 +1,5 @@
 # Data folder
-data/*
+data*/*
 !data-bin/*
 
 examples/translation/*
