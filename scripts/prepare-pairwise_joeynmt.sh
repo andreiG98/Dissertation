@@ -25,25 +25,28 @@ echo $BPE_TOKENS
 #     esac
 # done
 
+cd ../tools/
 echo 'Cloning Moses github repository (for tokenization scripts)...'
 git clone https://github.com/moses-smt/mosesdecoder.git
 
 echo 'Cloning Subword NMT repository (for BPE pre-processing)...'
 git clone https://github.com/rsennrich/subword-nmt.git
+cd ../scripts
 
 ROOT=$(dirname "$0")
-SCRIPTS=mosesdecoder/scripts
+SCRIPTS=../tools/mosesdecoder/scripts
 TOKENIZER=$SCRIPTS/tokenizer/tokenizer.perl
 LC=$SCRIPTS/tokenizer/lowercase.perl
 CLEAN=$SCRIPTS/training/clean-corpus-n.perl
 NORM_PUNC=$SCRIPTS/tokenizer/normalize-punctuation.perl
 REM_NON_PRINT_CHAR=$SCRIPTS/tokenizer/remove-non-printing-char.perl
-BPEROOT=subword-nmt/subword_nmt
+BPEROOT=../tools/subword-nmt/subword_nmt
 SPM_TRAIN=$BPEROOT/learn_bpe.py
+SPM_TRAIN_JOINT=$BPEROOT/learn_joint_bpe_and_vocab.py
 SPM_ENCODE=$BPEROOT/apply_bpe.py
-FAIRSEQ_SCRIPTS=fairseq_scripts
-FAIRSEQ_SPM_TRAIN=$FAIRSEQ_SCRIPTS/spm_train.py
-FAIRSEQ_SPM_ENCODE=$FAIRSEQ_SCRIPTS/spm_encode.py
+# FAIRSEQ_SCRIPTS=fairseq_scripts
+# FAIRSEQ_SPM_TRAIN=$FAIRSEQ_SCRIPTS/spm_train.py
+# FAIRSEQ_SPM_ENCODE=$FAIRSEQ_SCRIPTS/spm_encode.py
 
 CORPORA=(
     # "MultiParaCrawl"
@@ -137,20 +140,27 @@ for SRC in "${SRCS[@]}"; do
 done
 
 
-# learn BPE with sentencepiece
-TRAIN_FILES=$(for SRC in "${SRCS[@]}"; do DATA_FOLDER=${SRC}-${TGT}; echo $TMP/$DATA_FOLDER/train.tags.tok.clean.$SRC ; echo $TMP/$DATA_FOLDER/train.tags.tok.clean.$TGT ; done | tr "\n" ",")
-echo "learning joint BPE over ${TRAIN_FILES}..."
-python3 "$FAIRSEQ_SPM_TRAIN" \
-    --input=$TRAIN_FILES \
-    --model_prefix=$SPM_FOLDER/sentencepiece_$SRC-$TGT_$BPE_TOKENS.bpe \
-    --vocab_size=$BPE_TOKENS \
-    --character_coverage=1.0 \
-    --model_type=bpe
+echo "learning joint BPE..."
+for SRC in "${SRCS[@]}"; do
+    DATA_FOLDER=${SRC}-${TGT}
+    DATA_FOLDER_BPE=${DATA_FOLDER}/${BPE_TOKENS}
+    SPM_FOLDER_BPE=$SPM_FOLDER/$DATA_FOLDER_BPE
 
+    mkdir -p $SPM_FOLDER_BPE
+
+    # learn BPE model on train (concatenate both languages)
+    python3 "$SPM_TRAIN_JOINT" --input $TMP/$DATA_FOLDER/train.tags.tok.clean.$SRC $TMP/$DATA_FOLDER/train.tags.tok.clean.$TGT \
+        --write-vocabulary $SPM_FOLDER_BPE/vocab.$SRC $SPM_FOLDER_BPE/vocab.$TGT \
+        -s $BPE_TOKENS -o $SPM_FOLDER_BPE/code.$SRC-$TGT
+done
+
+
+# apply BPE model to train, test and dev
 echo "encoding train/dev/test with learned BPE..."
 for SRC in "${SRCS[@]}"; do
     DATA_FOLDER=${SRC}-${TGT}
     DATA_FOLDER_BPE=${DATA_FOLDER}/${BPE_TOKENS}
+    SPM_FOLDER_BPE=$SPM_FOLDER/$DATA_FOLDER_BPE
 
     for LANG in $SRC $TGT; do
         for phase in "train" "dev" "test"; do
@@ -158,15 +168,18 @@ for SRC in "${SRCS[@]}"; do
             [ "$phase" == "test" ] && TOK=$DATA_FOLDER/$phase.tags.tok.$LANG
             echo "$TOK"
             BPE_FILE=$DATA_FOLDER_BPE/$phase.bpe.$LANG
-            python3 "$FAIRSEQ_SPM_ENCODE" \
-                --model $SPM_FOLDER/sentencepiece_$SRC-$TGT_$BPE_TOKENS.bpe.model \
-                --output_format=piece \
-                --inputs $TMP/$TOK \
-                --outputs $TMP/$BPE_FILE
-                # --min-len $TRAIN_MINLEN --max-len $TRAIN_MAXLEN
+
+            python $SPM_ENCODE -c $SPM_FOLDER_BPE/code.$SRC-$TGT < $TMP/$TOK > $TMP/$BPE_FILE
         done
     done
 done
+
+# build joeynmt vocab
+echo "build joeynmt vocab"
+DATA_FOLDER=${SRC}-${TGT}
+DATA_FOLDER_BPE=${DATA_FOLDER}/${BPE_TOKENS}
+SPM_FOLDER_BPE=$SPM_FOLDER/$DATA_FOLDER_BPE
+python3 ../joeynmt/scripts/build_vocab.py $TMP/$DATA_FOLDER_BPE/train.bpe.$SRC $TMP/$DATA_FOLDER_BPE/train.bpe.$TGT --output_path $SPM_FOLDER_BPE/vocab.txt
 
 echo "copying train/dev/test to data folder"
 for SRC in "${SRCS[@]}"; do

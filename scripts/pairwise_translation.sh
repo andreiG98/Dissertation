@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # First install sacrebleu, sentencepiece, opustools, tensorboardX
 pip install sacrebleu sacremoses sentencepiece opustools tensorboardX
 
