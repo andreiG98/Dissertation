@@ -6,7 +6,7 @@ data*/*
 
 results/*
 
-wandb/*
+scripts/wandb/*
 
 examples/translation/*
 !examples/translation/*.sh
